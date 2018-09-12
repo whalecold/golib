@@ -94,6 +94,41 @@ func X509KeyPair(certPEMBlock, keyPEMBlock []byte) (*TLSCert, error) {
 	return convert(cert)
 }
 
+// LoadX509PasswdKeyPair parses a encryption public/private key pair from a pair of
+// PEM encoded data.
+func LoadX509PasswdKeyPair(certFile, keyFile, passwd string) (*TLSCert, error, []byte, []byte) {
+	certPEMBlock, err := ioutil.ReadFile(certFile)
+	if err != nil {
+		return nil, err, nil, nil
+	}
+	keyPEMBlock, err := ioutil.ReadFile(keyFile)
+	if err != nil {
+		return nil, err, nil, nil
+	}
+
+	pemBlock := NewPEMFromBytes(keyPEMBlock)
+	if pemBlock.Block == nil {
+		return nil, fmt.Errorf("NewPEMFromBytes error"), nil, nil
+	}
+	privateKey, err := x509.DecryptPEMBlock(pemBlock.Block, []byte(passwd))
+	if err != nil {
+		return nil, err, nil, nil
+	}
+
+	newPem := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privateKey,
+	}
+	keyPEMBlock = pem.EncodeToMemory(newPem)
+	cert, err := tls.X509KeyPair(certPEMBlock, keyPEMBlock)
+	if err != nil {
+		return nil, err, nil, nil
+	}
+
+	tlsCert, err := convert(cert)
+	return tlsCert, err, certPEMBlock, keyPEMBlock
+}
+
 func convert(cert tls.Certificate) (*TLSCert, error) {
 	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {
